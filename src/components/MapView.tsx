@@ -67,10 +67,20 @@ export default function MapView() {
 
     const DirectionsService = new google.maps.DirectionsService();
 
+    const bMap = new Map();
+    stopTime?.data?.forEach((stop: any) => {
+      if (!bMap.has(stop.stop_id)) {
+        bMap.set(stop.stop_id, []);
+      }
+      bMap.get(stop.stop_id).push(stop);
+    });
+
+    // Filter stops and preserve the order of stop_times sequence
     const waypoints = stops
-      .filter((stop) =>
-        stopTime?.data?.find((d: any) => d.stop_id == stop.stop_id)
-      )
+      .filter((stop) => bMap.has(stop.stop_id))
+      .flatMap((stop) => bMap.get(stop.stop_id))
+      .sort((a, b) => a.stop_sequence - b.stop_sequence)
+      .map((stop) => stops.find((a) => a.stop_id === stop.stop_id))
       .map((stop) => ({
         location: {
           lat: Number(stop.stop_lat),
@@ -78,8 +88,6 @@ export default function MapView() {
         },
         stopover: true,
       }));
-
-    waypoints.sort((a, b) => a.location.lat - b.location.lat);
 
     DirectionsService.route(
       {
