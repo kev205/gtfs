@@ -21,9 +21,12 @@ export default function MapView() {
     styles: process.env.USE_CUSTOM_MAP_STYLE ? darkMap : undefined,
   };
 
-  const { location, origin, destination, stops } = useContext(MapContext);
+  const { location, origin, destination, stops, stopTime } =
+    useContext(MapContext);
 
   const [routePath, setRoutePath] = useState<Array<[number, number]>>([]);
+
+  const [center, setCenter] = useState(location);
 
   const [directions, setDirections] = useState<
     google.maps.DirectionsResult | null | undefined
@@ -46,6 +49,10 @@ export default function MapView() {
           const way_points = polilyne.decode(
             response.routes[0].overview_polyline
           );
+          setCenter({
+            latitude: response.request.origin.location?.lat(),
+            longitude: response.request.origin.location?.lng(),
+          });
           setDirections(response);
           setRoutePath(way_points.slice(1, way_points.length - 1));
         } else {
@@ -54,6 +61,51 @@ export default function MapView() {
       }
     );
   }, [origin, destination]);
+
+  useEffect(() => {
+    if (!stopTime || !stops.length) return;
+
+    const DirectionsService = new google.maps.DirectionsService();
+
+    const waypoints = stops
+      .filter((stop) =>
+        stopTime?.data?.find((d: any) => d.stop_id == stop.stop_id)
+      )
+      .map((stop) => ({
+        location: {
+          lat: Number(stop.stop_lat),
+          lng: Number(stop.stop_lon),
+        },
+        stopover: true,
+      }));
+
+    waypoints.sort((a, b) => a.location.lat - b.location.lat);
+
+    DirectionsService.route(
+      {
+        origin: waypoints[0].location,
+        destination: waypoints[waypoints.length - 1].location,
+        travelMode: google.maps.TravelMode.DRIVING,
+        unitSystem: google.maps.UnitSystem.METRIC,
+        waypoints: waypoints.slice(1, -1),
+      },
+      (response, status) => {
+        if (response != null && status === google.maps.DirectionsStatus.OK) {
+          const way_points = polilyne.decode(
+            response.routes[0].overview_polyline
+          );
+          setCenter({
+            latitude: response.request.origin.location?.lat(),
+            longitude: response.request.origin.location?.lng(),
+          });
+          setDirections(response);
+          setRoutePath(way_points.slice(1, way_points.length - 1));
+        } else {
+          console.error(`error fetching directions ${response}`);
+        }
+      }
+    );
+  }, [stopTime, stops]);
 
   function PolygonArray(latitude: number) {
     const R = 6378137;
@@ -92,24 +144,36 @@ export default function MapView() {
     paths: PolygonPoints(routePath),
   });
 
-  const stopsToDraw = stops.filter((stop) =>
-    google.maps.geometry.poly.containsLocation(
-      {
-        lat: Number(stop.stop_lat),
-        lng: Number(stop.stop_lon),
-      },
-      polygonBound
-    )
-  );
+  const stopToMark = stopTime
+    ? stops
+        .filter((stop) =>
+          stopTime?.data?.find((d: any) => d.stop_id == stop.stop_id)
+        )
+        .map((stop) => {
+          const r = stopTime.data.find((st: any) => st.stop_id == stop.stop_id);
+          if (r) {
+            return {
+              ...stop,
+              ...r,
+            };
+          }
+          return stop;
+        })
+    : stops.filter((stop) =>
+        google.maps.geometry.poly.containsLocation(
+          {
+            lat: Number(stop.stop_lat),
+            lng: Number(stop.stop_lon),
+          },
+          polygonBound
+        )
+      );
 
   return (
     <div className="w-full mt-10">
       <GoogleMap
         mapContainerStyle={defaultMapContainerStyle}
-        center={
-          origin ??
-          (location && { lat: location?.latitude, lng: location?.longitude })
-        }
+        center={center && { lat: center?.latitude, lng: center?.longitude }}
         zoom={defaultMapZoom}
         options={defaultMapOptions}
       >
@@ -120,14 +184,20 @@ export default function MapView() {
             }}
           />
         )}
-        {stopsToDraw?.map((stop) => (
+        {stopToMark?.map((stop) => (
           <Marker
             key={stop.stop_id}
             position={{
               lat: Number(stop.stop_lat),
               lng: Number(stop.stop_lon),
             }}
-            title={stop.stop_name}
+            title={`Name: ${stop.stop_name}\n ${
+              stop.arrival_time ? `Arrival Time: ${stop.arrival_time}\n` : ""
+            }${
+              stop.departure_time
+                ? `Departure Time: ${stop.departure_time}\n`
+                : ""
+            }`}
             animation={google.maps.Animation.DROP}
           />
         ))}

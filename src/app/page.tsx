@@ -5,6 +5,7 @@ import { MapProvider } from "@/providers/map-provider";
 
 export default async function Home() {
   const points = await transformToJSON("stops.txt");
+  transformToJSON("stop_times.txt");
 
   return (
     <main className="flex flex-row py-8" style={{ paddingLeft: 16 }}>

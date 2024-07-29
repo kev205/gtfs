@@ -5,7 +5,7 @@ import { promises as fs } from "fs";
 let map: any = {};
 
 export default async function transformToJSON(entity: string) {
-  if (map[entity]) return map[entity];
+  if (map[entity]) return Promise.resolve(map[entity]);
 
   try {
     const file = await fs.readFile(
