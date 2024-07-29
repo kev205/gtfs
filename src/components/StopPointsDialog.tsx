@@ -63,21 +63,23 @@ export default function StopPointsDialog({
       <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
 
       <div className="fixed inset-0 w-screen overflow-y-auto">
-        <div className="flex h-full items-center justify-center p-4">
-          <DialogPanel className="mx-auto max-w-sm rounded bg-white">
-            <DialogTitle>{label}</DialogTitle>
+        <div className="flex h-full items-center justify-center p-">
+          <DialogPanel className="flex-1/3 w-1/3 h-2/3 rounded bg-white p-4">
+            <DialogTitle className="text-center text-2xl">{label}</DialogTitle>
             <Description>Choose a value</Description>
             <Combobox value={selected} onChange={onSelect}>
               <ComboboxInput
                 onChange={onChange}
                 displayValue={(stop: any) => stop?.stop_name ?? ""}
+                className="w-full mt-4"
+                autoFocus
               />
-              <ComboboxOptions>
+              <ComboboxOptions className="flex-1">
                 {filtered.map((stop) => (
                   <ComboboxOption key={stop.stop_id} value={stop} as={Fragment}>
                     {({ selected, focus }) => (
                       <li
-                        className={`${
+                        className={`w-full ${
                           focus
                             ? "bg-blue-500 text-white"
                             : "bg-white text-black"

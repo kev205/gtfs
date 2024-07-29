@@ -83,9 +83,6 @@ export function MapProvider({
     >
       <div className="grid gap-6 md:grid-cols-2 mb-100">
         <div>
-          <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
-            Origin
-          </label>
           <div
             className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
             onClick={() => {
@@ -93,13 +90,10 @@ export function MapProvider({
               setIsopen(true);
             }}
           >
-            <span>{origin ? origin.stop_name : "Origin"}</span>
+            <span>{origin ? origin.stop_name : "Enter Origin"}</span>
           </div>
         </div>
-        <div>
-          <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
-            Destination
-          </label>
+        <div className="mt-10">
           <div
             className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
             onClick={() => {
@@ -107,7 +101,9 @@ export function MapProvider({
               setIsopen(true);
             }}
           >
-            <span>{destination ? destination.stop_name : "Destination"}</span>
+            <span>
+              {destination ? destination.stop_name : "Enter Destination"}
+            </span>
           </div>
         </div>
       </div>

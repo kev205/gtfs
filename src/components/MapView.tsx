@@ -12,7 +12,7 @@ export const defaultMapContainerStyle: CSSProperties = {
 };
 
 export default function MapView() {
-  const defaultMapZoom = 16;
+  const defaultMapZoom = 18;
   const defaultMapOptions: google.maps.MapOptions = {
     zoomControl: true,
     tilt: 0,
@@ -103,7 +103,7 @@ export default function MapView() {
   );
 
   return (
-    <div className="w-full">
+    <div className="w-full mt-10">
       <GoogleMap
         mapContainerStyle={defaultMapContainerStyle}
         center={
