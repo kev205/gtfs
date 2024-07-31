@@ -1,12 +1,7 @@
 "use client";
 
 import { MapContext } from "@/providers/map-provider";
-import {
-  DirectionsRenderer,
-  GoogleMap,
-  Marker,
-  Polygon,
-} from "@react-google-maps/api";
+import { DirectionsRenderer, GoogleMap, Marker } from "@react-google-maps/api";
 import { CSSProperties, useContext, useEffect, useState } from "react";
 import polilyne from "google-polyline";
 import { darkMap } from "@/lib/map";
@@ -34,7 +29,6 @@ export default function MapView() {
   const [directions, setDirections] = useState<
     google.maps.DirectionsResult | null | undefined
   >();
-  const [path, setPath] = useState<any[]>([]);
 
   useEffect(() => {
     if (!origin || !destination) return;
@@ -48,6 +42,7 @@ export default function MapView() {
         destination,
         travelMode: google.maps.TravelMode.DRIVING,
         unitSystem: google.maps.UnitSystem.METRIC,
+        
       },
       (response, status) => {
         if (response != null && status === google.maps.DirectionsStatus.OK) {
@@ -79,7 +74,7 @@ export default function MapView() {
               .map((stop) => ({
                 stop_id: stop.stop_id,
                 data: {
-                  name: stop.stop_name,
+                  stop_name: stop.stop_name,
                   stop_lat: stop.stop_lat,
                   stop_lon: stop.stop_lon,
                 },
@@ -110,46 +105,68 @@ export default function MapView() {
       .map((stop) => stops.find((a) => a.stop_id === stop.stop_id));
 
     // Filter stops and preserve the order of stop_times sequence
-    const waypoints: any[] = fmap.map((stop) => ({
-      lat: Number(stop.stop_lat),
-      lng: Number(stop.stop_lon),
+    const waypoints: google.maps.DirectionsWaypoint[] = fmap.map((stop) => ({
+      location: {
+        lat: Number(stop.stop_lat),
+        lng: Number(stop.stop_lon),
+      } as google.maps.LatLngLiteral,
+      stopover: false,
     }));
-    setCenter({
-      latitude: waypoints[0].lat,
-      longitude: waypoints[0].lng,
-    });
-    setPath(waypoints);
-    const stopMap = fmap
-      .map((stop) => {
-        const r = stopTime.data.find((st: any) => st.stop_id == stop.stop_id);
-        if (r) {
-          return {
-            ...stop,
-            ...r,
-          };
+
+    // get the route between stops
+    DirectionsService.route(
+      {
+        origin: waypoints[0].location as google.maps.LatLngLiteral,
+        destination: waypoints[waypoints.length - 1]
+          .location as google.maps.LatLngLiteral,
+        travelMode: google.maps.TravelMode.DRIVING,
+        unitSystem: google.maps.UnitSystem.METRIC,
+        waypoints: waypoints.slice(1, -1),
+      },
+      (response, status) => {
+        if (response != null && status === google.maps.DirectionsStatus.OK) {
+          // set center to move the map
+          setCenter({
+            latitude: response.request.origin.location?.lat(),
+            longitude: response.request.origin.location?.lng(),
+          });
+          setDirections(response);
+          const stopMap = fmap
+            .map((stop) => {
+              const r = stopTime.data.find(
+                (st: any) => st.stop_id == stop.stop_id
+              );
+              if (r) {
+                return {
+                  ...stop,
+                  ...r,
+                };
+              }
+              return stop;
+            })
+            .reduce((acc, curr) => {
+              if (!acc[curr.stop_id]) {
+                acc[curr.stop_id] = {
+                  stop_name: curr.stop_name,
+                  stop_lat: curr.stop_lat,
+                  stop_lon: curr.stop_lon,
+                  times: [],
+                };
+              }
+              acc[curr.stop_id].times.push({
+                arrival_time: curr.arrival_time,
+                departure_time: curr.departure_time,
+              });
+              return acc;
+            }, {});
+          const draw = Object.keys(stopMap).map((key) => ({
+            stop_id: key,
+            data: stopMap[key],
+          }));
+          setStopMark(draw.slice(1, -1));
         }
-        return stop;
-      })
-      .reduce((acc, curr) => {
-        if (!acc[curr.stop_id]) {
-          acc[curr.stop_id] = {
-            stop_name: curr.stop_name,
-            stop_lat: curr.stop_lat,
-            stop_lon: curr.stop_lon,
-            times: [],
-          };
-        }
-        acc[curr.stop_id].times.push({
-          arrival_time: curr.arrival_time,
-          departure_time: curr.departure_time,
-        });
-        return acc;
-      }, {});
-    const draw = Object.keys(stopMap).map((key) => ({
-      stop_id: key,
-      data: stopMap[key],
-    }));
-    setStopMark(draw.slice(1, -1));
+      }
+    );
   }, [stopTime, stops]);
 
   // compute extra latitude to best fit the size of road
@@ -194,14 +211,13 @@ export default function MapView() {
         zoom={defaultMapZoom}
         options={defaultMapOptions}
       >
-        {/* {directions && (
+        {directions && (
           <DirectionsRenderer
             options={{
               directions: directions,
             }}
           />
-        )} */}
-        <Polygon path={path} />
+        )}
         {stopToMark?.map((stop) => (
           <Marker
             key={stop.stop_id}
