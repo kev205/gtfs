@@ -1,7 +1,12 @@
 "use client";
 
 import { MapContext } from "@/providers/map-provider";
-import { DirectionsRenderer, GoogleMap, Marker } from "@react-google-maps/api";
+import {
+  DirectionsRenderer,
+  GoogleMap,
+  Marker,
+  Polygon,
+} from "@react-google-maps/api";
 import { CSSProperties, useContext, useEffect, useState } from "react";
 import polilyne from "google-polyline";
 import { darkMap } from "@/lib/map";
@@ -12,7 +17,7 @@ export const defaultMapContainerStyle: CSSProperties = {
 };
 
 export default function MapView() {
-  const defaultMapZoom = 18;
+  const defaultMapZoom = 15;
   const defaultMapOptions: google.maps.MapOptions = {
     zoomControl: true,
     tilt: 0,
@@ -24,19 +29,19 @@ export default function MapView() {
   const { location, origin, destination, stops, stopTime } =
     useContext(MapContext);
 
-  const [routePath, setRoutePath] = useState<Array<[number, number]>>([]);
-
   const [center, setCenter] = useState(location);
-
+  const [stopToMark, setStopMark] = useState<any[]>();
   const [directions, setDirections] = useState<
     google.maps.DirectionsResult | null | undefined
   >();
+  const [path, setPath] = useState<any[]>([]);
 
   useEffect(() => {
     if (!origin || !destination) return;
 
     const DirectionsService = new google.maps.DirectionsService();
 
+    // get the route between origin and destination
     DirectionsService.route(
       {
         origin,
@@ -49,14 +54,37 @@ export default function MapView() {
           const way_points = polilyne.decode(
             response.routes[0].overview_polyline
           );
+          // set center to move the map
           setCenter({
             latitude: response.request.origin.location?.lat(),
             longitude: response.request.origin.location?.lng(),
           });
           setDirections(response);
-          setRoutePath(way_points.slice(1, way_points.length - 1));
-        } else {
-          console.error(`error fetching directions ${response}`);
+          setStopMark(
+            stops
+              .filter(
+                (
+                  stop // filter stop who is closer to polygonBound
+                ) =>
+                  google.maps.geometry.poly.containsLocation(
+                    {
+                      lat: Number(stop.stop_lat),
+                      lng: Number(stop.stop_lon),
+                    },
+                    new google.maps.Polygon({
+                      paths: PolygonPoints(way_points.slice(1, -1)),
+                    })
+                  )
+              )
+              .map((stop) => ({
+                stop_id: stop.stop_id,
+                data: {
+                  name: stop.stop_name,
+                  stop_lat: stop.stop_lat,
+                  stop_lon: stop.stop_lon,
+                },
+              }))
+          );
         }
       }
     );
@@ -75,46 +103,56 @@ export default function MapView() {
       bMap.get(stop.stop_id).push(stop);
     });
 
-    // Filter stops and preserve the order of stop_times sequence
-    const waypoints = stops
+    const fmap = stops
       .filter((stop) => bMap.has(stop.stop_id))
       .flatMap((stop) => bMap.get(stop.stop_id))
       .sort((a, b) => a.stop_sequence - b.stop_sequence)
-      .map((stop) => stops.find((a) => a.stop_id === stop.stop_id))
-      .map((stop) => ({
-        location: {
-          lat: Number(stop.stop_lat),
-          lng: Number(stop.stop_lon),
-        },
-        stopover: true,
-      }));
+      .map((stop) => stops.find((a) => a.stop_id === stop.stop_id));
 
-    DirectionsService.route(
-      {
-        origin: waypoints[0].location,
-        destination: waypoints[waypoints.length - 1].location,
-        travelMode: google.maps.TravelMode.DRIVING,
-        unitSystem: google.maps.UnitSystem.METRIC,
-        waypoints: waypoints.slice(1, -1),
-      },
-      (response, status) => {
-        if (response != null && status === google.maps.DirectionsStatus.OK) {
-          const way_points = polilyne.decode(
-            response.routes[0].overview_polyline
-          );
-          setCenter({
-            latitude: response.request.origin.location?.lat(),
-            longitude: response.request.origin.location?.lng(),
-          });
-          setDirections(response);
-          setRoutePath(way_points.slice(1, way_points.length - 1));
-        } else {
-          console.error(`error fetching directions ${response}`);
+    // Filter stops and preserve the order of stop_times sequence
+    const waypoints: any[] = fmap.map((stop) => ({
+      lat: Number(stop.stop_lat),
+      lng: Number(stop.stop_lon),
+    }));
+    setCenter({
+      latitude: waypoints[0].lat,
+      longitude: waypoints[0].lng,
+    });
+    setPath(waypoints);
+    const stopMap = fmap
+      .map((stop) => {
+        const r = stopTime.data.find((st: any) => st.stop_id == stop.stop_id);
+        if (r) {
+          return {
+            ...stop,
+            ...r,
+          };
         }
-      }
-    );
+        return stop;
+      })
+      .reduce((acc, curr) => {
+        if (!acc[curr.stop_id]) {
+          acc[curr.stop_id] = {
+            stop_name: curr.stop_name,
+            stop_lat: curr.stop_lat,
+            stop_lon: curr.stop_lon,
+            times: [],
+          };
+        }
+        acc[curr.stop_id].times.push({
+          arrival_time: curr.arrival_time,
+          departure_time: curr.departure_time,
+        });
+        return acc;
+      }, {});
+    const draw = Object.keys(stopMap).map((key) => ({
+      stop_id: key,
+      data: stopMap[key],
+    }));
+    setStopMark(draw.slice(1, -1));
   }, [stopTime, stops]);
 
+  // compute extra latitude to best fit the size of road
   function PolygonArray(latitude: number) {
     const R = 6378137;
     const pi = 3.14;
@@ -148,35 +186,6 @@ export default function MapView() {
     return FullPoly;
   }
 
-  const polygonBound = new google.maps.Polygon({
-    paths: PolygonPoints(routePath),
-  });
-
-  const stopToMark = stopTime
-    ? stops
-        .filter((stop) =>
-          stopTime?.data?.find((d: any) => d.stop_id == stop.stop_id)
-        )
-        .map((stop) => {
-          const r = stopTime.data.find((st: any) => st.stop_id == stop.stop_id);
-          if (r) {
-            return {
-              ...stop,
-              ...r,
-            };
-          }
-          return stop;
-        })
-    : stops.filter((stop) =>
-        google.maps.geometry.poly.containsLocation(
-          {
-            lat: Number(stop.stop_lat),
-            lng: Number(stop.stop_lon),
-          },
-          polygonBound
-        )
-      );
-
   return (
     <div className="w-full mt-10">
       <GoogleMap
@@ -185,27 +194,33 @@ export default function MapView() {
         zoom={defaultMapZoom}
         options={defaultMapOptions}
       >
-        {directions && (
+        {/* {directions && (
           <DirectionsRenderer
             options={{
               directions: directions,
             }}
           />
-        )}
+        )} */}
+        <Polygon path={path} />
         {stopToMark?.map((stop) => (
           <Marker
             key={stop.stop_id}
             position={{
-              lat: Number(stop.stop_lat),
-              lng: Number(stop.stop_lon),
+              lat: Number(stop.data.stop_lat),
+              lng: Number(stop.data.stop_lon),
             }}
-            title={`Name: ${stop.stop_name}\n ${
-              stop.arrival_time ? `Arrival Time: ${stop.arrival_time}\n` : ""
-            }${
-              stop.departure_time
-                ? `Departure Time: ${stop.departure_time}\n`
-                : ""
-            }`}
+            title={`Name: ${stop.data.stop_name}\n${stop.data?.times?.map(
+              (t: any, index: number) =>
+                `${
+                  t.arrival_time
+                    ? `Arrival Time ${index + 1}: ${t.arrival_time}\n`
+                    : ""
+                }${
+                  t.departure_time
+                    ? `Departure Time ${index + 1}: ${t.departure_time}\n`
+                    : ""
+                }`
+            )}`}
             animation={google.maps.Animation.DROP}
           />
         ))}

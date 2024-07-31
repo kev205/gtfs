@@ -53,7 +53,6 @@ export function MapProvider({
     latitude: number;
     longitude: number;
   }>();
-
   const [origin, setOrigin] = useState<any>();
   const [destination, setDestination] = useState<any>();
   const [stopTimes, setStoptimes] = useState<any[]>([]);
